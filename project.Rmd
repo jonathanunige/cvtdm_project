@@ -1,0 +1,94 @@
+---
+title: "Exercise_5"
+author: "Jonathan Mendieta"
+date: "17/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+load libraries, install.packages("")
+```{r}
+library(datasets)
+library(caret)
+library(GGally)
+library(viridis)
+library(plotly)
+library(cluster)
+library(naniar)
+```
+
+Exploratory data analysis
+```{r}
+df = iris
+dim(df)
+sapply(df, function(x) length(unique(x)))
+str(df)
+summary(df)
+gg_miss_var(df)
+
+norm.values = preProcess(df[,-5], method = c("center","scale"))
+df.norm = predict(norm.values, df[,-5]) 
+head(df.norm)
+
+cor(df.norm) #VIF to check collinearity, discard from 5 to 10 check, if more than 10 discard. 
+```
+
+Methodology
+```{r}
+k = seq(1,15,1)
+metrics.df = data.frame(k, wsse = rep(0, length(k)))
+
+for(i in 1:length(k)){
+  cluster_i = kmeans(df.norm, centers=i, nstart= 25)
+  metrics.df[i, 2] = cluster_i$tot.withinss
+}
+
+plot_kmeans = ggplot(metrics.df, aes(x = metrics.df$k, y = metrics.df$wsse)) + geom_line(linetype = 3) + geom_point(shape = 1) + ylab("Total Within Sum of Squares") + xlab("k") + scale_x_continuous(breaks = k)  + theme_classic()
+
+plot_kmeans
+
+set.seed(1)
+k_clusters = kmeans(df.norm, centers=3, nstart= 25)
+
+k_clusters$cluster
+
+k_clusters$size
+
+k_clusters$centers
+
+dist(k_clusters$centers)
+
+df$clusters = as.factor(k_clusters$cluster)
+
+ggparcoord(df[,-5], columns = 1:4, groupColumn = 5, order = "anyClass", scale = "globalminmax", showPoints = T, title = "Parallel Plot Iris dataset with k-clusters", alphaLines = 0.3) + scale_color_viridis(discrete = T, option = "E") + theme(plot.title = element_text(size = 10)) + coord_flip() + theme_bw()
+
+centroids = data.frame(k_clusters$centers)
+
+scale_back_z_score <- function(z,var) {
+  sd_train = sd(df[,var])
+  mean_train = mean(df[,var])
+  x = sapply(z, function(x_) x_*sd_train + mean_train)
+  return(x)
+}
+
+centroids$Sepal.Length = scale_back_z_score(centroids$Sepal.Length, "Sepal.Length")
+centroids$Sepal.Width = scale_back_z_score(centroids$Sepal.Width, "Sepal.Width")
+centroids$Petal.Length = scale_back_z_score(centroids$Petal.Length, "Petal.Length")
+centroids$Petal.Width = scale_back_z_score(centroids$Petal.Width, "Petal.Width")
+
+p <- plot_ly(df[,-c(1,5)], x = ~Petal.Length, z = ~Petal.Width, y = ~Sepal.Width)
+fig <- p %>% add_markers(color = ~clusters, size = 10) %>% add_mesh(opacity=0.1, data=df[df$clusters==2,], alphahull =0) %>% add_mesh(opacity=0.1, data=df[df$clusters==3,], alphahull = 0) %>% add_mesh(opacity=0.1, data=df[df$clusters==1,], alphahull = 0) %>% add_trace(data = centroids, type = "scatter3d", x = ~Petal.Length, z = ~Petal.Width, y = ~Sepal.Width, mode = "markers", marker = list(size = 5, color = "black", symbol="cross"), name="centroids")
+fig
+```
+
+```{r}
+sil = silhouette(k_clusters$cluster, dist(df[,-c(5,6)]))
+plot(sil, col= 1:3, border= NA)
+
+```
+
+
